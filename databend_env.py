@@ -1,8 +1,8 @@
-"""Environment configuration for the MCP Databend server.
-"""
+"""Environment configuration for the MCP Databend server."""
 
 from dataclasses import dataclass
 import os
+
 
 @dataclass
 class DatabendConfig:
@@ -19,11 +19,14 @@ class DatabendConfig:
     @property
     def dsn(self) -> str:
         """Get the Databend dsn connection string."""
-        return os.environ.get("DATABEND_DSN", "databend://default:@127.0.0.1:8000/?sslmode=disable")
+        return os.environ.get(
+            "DATABEND_DSN", "databend://default:@127.0.0.1:8000/?sslmode=disable"
+        )
 
 
 # Global instance placeholder for the singleton pattern
 _CONFIG_INSTANCE = None
+
 
 def get_config():
     """
