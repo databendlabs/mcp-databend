@@ -36,8 +36,9 @@ def create_client():
 
 def execute_query(query: str):
     client = create_client()
+    conn = client.get_conn()
     try:
-        cursor = client.query_iter(query)
+        cursor = conn.query_iter(query)
         names = [field.name for field in cursor.schema().fields()]
         rows = []
         for row in cursor:
