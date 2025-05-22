@@ -12,6 +12,10 @@ class DatabendConfig:
         DATABEND_DSN: The dsn connect string (defaults to: "databend://default:@127.0.0.1:8000/?sslmode=disable")
     """
 
+    def __init__(self):
+        """Initialize the configuration from environment variables."""
+        pass
+
     @property
     def dsn(self) -> str:
         """Get the Databend dsn connection string."""
@@ -20,7 +24,6 @@ class DatabendConfig:
 
 # Global instance placeholder for the singleton pattern
 _CONFIG_INSTANCE = None
-
 
 def get_config():
     """

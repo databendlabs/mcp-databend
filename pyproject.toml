@@ -9,3 +9,8 @@ dependencies = [
     "mcp>=1.9.0",
     "python-dotenv>=1.1.0",
 ]
+
+[dependency-groups]
+dev = [
+    "mcp[cli]>=1.9.0",
+]

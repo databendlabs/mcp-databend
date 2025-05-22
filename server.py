@@ -34,11 +34,11 @@ def create_client():
     client = BlockingDatabendClient(config.dsn)
     return client
 
-def execute_query(query: str):
+def execute_query(sql: str):
     client = create_client()
     conn = client.get_conn()
     try:
-        cursor = conn.query_iter(query)
+        cursor = conn.query_iter(sql)
         names = [field.name for field in cursor.schema().fields()]
         rows = []
         for row in cursor:
