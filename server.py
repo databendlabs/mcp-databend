@@ -114,14 +114,14 @@ async def execute_sql(sql: str) -> dict:
 
 
 @mcp.tool()
-def list_databases():
+def show_databases():
     """List available Databend databases"""
     logger.info("Listing all databases")
     return _execute_sql("SHOW DATABASES")
 
 
 @mcp.tool()
-def list_tables(database: Optional[str] = None, filter: Optional[str] = None):
+def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
     """
     List available Databend tables in a database
     Args:
