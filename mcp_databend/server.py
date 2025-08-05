@@ -11,7 +11,7 @@ from databend_env import get_config
 
 # Constants
 SERVER_NAME = "mcp-databend"
-DEFAULT_TIMEOUT = 30  # seconds
+DEFAULT_TIMEOUT = 60  # seconds
 
 # Configure logging
 logging.basicConfig(
@@ -159,7 +159,8 @@ def describe_table(table: str, database: Optional[str] = None):
     return execute_sql(sql)
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for the MCP server."""
     try:
         logger.info("Starting Databend MCP Server...")
         mcp.run()
@@ -168,3 +169,7 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Server startup failed: {str(e)}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
