@@ -1,20 +1,52 @@
 [project]
-name = "mcp-server-databend"
-version = "0.1.0"
-description = "Add your description here"
+name = "mcp-databend"
+version = "0.1.2"
+description = "An MCP server for Databend."
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [
+    { name = "Databend Labs", email = "z@databend.com" },
+]
+maintainers = [
+    { name = "Databend Labs", email = "z@databend.com" },
+]
+license = "Apache-2.0"
+keywords = ["mcp", "databend", "database", "sql", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "databend-driver>=0.27.3",
     "mcp>=1.9.0",
     "python-dotenv>=1.1.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/databendlabs/mcp-databend"
+Repository = "https://github.com/databendlabs/mcp-databend"
+Documentation = "https://github.com/databendlabs/mcp-databend#readme"
+Issues = "https://github.com/databendlabs/mcp-databend/issues"
+
+[project.scripts]
+mcp-databend = "mcp_databend.main:main"
+
 [dependency-groups]
 dev = [
     "mcp[cli]>=1.9.0",
     "ruff>=0.1.0",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mcp_databend*"]
 
 [tool.ruff]
 target-version = "py312"
