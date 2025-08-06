@@ -7,7 +7,7 @@ import concurrent.futures
 from dotenv import load_dotenv
 import atexit
 from typing import Optional
-from databend_env import get_config
+from .env import get_config
 
 # Constants
 SERVER_NAME = "mcp-databend"
