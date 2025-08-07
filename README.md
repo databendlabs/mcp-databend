@@ -32,7 +32,13 @@ uv tool install mcp-databend
 
 ### Step 3: Configure Your MCP Client
 
-#### MCP Configuration
+#### Option A: Claude Code (CLI)
+
+```bash
+claude mcp add mcp-databend --env DATABEND_DSN='your-connection-string-here' -- uv tool run mcp-databend
+```
+
+#### Option B: MCP Configuration (JSON)
 
 Add to your MCP client configuration (e.g., Claude Desktop, Windsurf):
 
@@ -52,6 +58,7 @@ Add to your MCP client configuration (e.g., Claude Desktop, Windsurf):
 
 #### Supported Clients
 
+- **Claude Code** (CLI)
 - **Windsurf** / **Claude Desktop** / **Continue.dev** / **Cursor IDE**
 
 ### Step 4: Start Using
