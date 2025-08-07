@@ -21,8 +21,8 @@ Get your connection string from [Databend documentation](https://docs.databend.c
 
 | Deployment | Connection String Example |
 |------------|---------------------------|
-| **Databend Cloud** | `databend://cloudapp:pass@host:443/database?warehouse=wh` |
-| **Self-hosted** | `databend://user:pass@localhost:8000/database?sslmode=disable` |
+| **Databend Cloud** | `databend://user:pwd@host:443/database?warehouse=wh` |
+| **Self-hosted** | `databend://user:pwd@localhost:8000/database?sslmode=disable` |
 
 ### Step 2: Install
 
