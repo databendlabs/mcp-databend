@@ -10,6 +10,7 @@ class DatabendConfig:
 
     Required environment variables:
         DATABEND_DSN: The dsn connect string (defaults to: "databend://default:@127.0.0.1:8000/?sslmode=disable")
+        SAFE_MODE: Enable safe mode to restrict dangerous SQL operations (defaults to: "true")
     """
 
     def __init__(self):
@@ -22,6 +23,11 @@ class DatabendConfig:
         return os.environ.get(
             "DATABEND_DSN", "databend://default:@127.0.0.1:8000/?sslmode=disable"
         )
+
+    @property
+    def safe_mode(self) -> bool:
+        """Get the safe mode setting."""
+        return os.environ.get("SAFE_MODE", "true").lower() in ("true", "1", "yes", "on")
 
 
 # Global instance placeholder for the singleton pattern

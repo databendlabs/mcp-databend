@@ -2,6 +2,7 @@ import json
 import os
 import logging
 import sys
+import re
 from mcp.server.fastmcp import FastMCP
 import concurrent.futures
 from dotenv import load_dotenv
@@ -30,6 +31,36 @@ load_dotenv()
 
 # Initialize MCP server
 mcp = FastMCP(SERVER_NAME)
+
+
+def is_sql_safe(sql: str) -> tuple[bool, str]:
+    """
+    Check if SQL query is safe to execute in safe mode.
+    
+    Args:
+        sql: SQL query string to check
+        
+    Returns:
+        Tuple of (is_safe, reason) where is_safe is boolean and reason is error message if unsafe
+    """
+    sql_upper = sql.upper().strip()
+    
+    # List of dangerous operations to block in safe mode
+    dangerous_patterns = [
+        (r'\bDROP\s+', "DROP operations are not allowed in MCP safe mode"),
+        (r'\bDELETE\s+', "DELETE operations are not allowed in MCP safe mode"),
+        (r'\bTRUNCATE\s+', "TRUNCATE operations are not allowed in MCP safe mode"),
+        (r'\bALTER\s+', "ALTER operations are not allowed in MCP safe mode"),
+        (r'\bUPDATE\s+', "UPDATE operations are not allowed in MCP safe mode"),
+        (r'\bREVOKE\s+', "REVOKE operations are not allowed in MCP safe mode"),
+    ]
+    
+    # Check each dangerous pattern
+    for pattern, reason in dangerous_patterns:
+        if re.search(pattern, sql_upper, re.IGNORECASE | re.DOTALL):
+            return False, reason
+    
+    return True, ""
 
 
 def create_databend_client():
@@ -73,6 +104,17 @@ def execute_databend_query(sql: str) -> list[dict] | dict:
 
 def _execute_sql(sql: str) -> dict:
     logger.info(f"Executing SQL query: {sql}")
+    
+    # Check safe mode configuration
+    config = get_config()
+    if config.safe_mode:
+        is_safe, reason = is_sql_safe(sql)
+        if not is_safe:
+            error_msg = f"Query blocked by MCP safe mode: {reason}. Current mode: SAFE_MODE=true. To disable, set SAFE_MODE=false"
+            logger.warning(f"{error_msg} - Query: {sql}")
+            return {"status": "error", "message": error_msg}
+    else:
+        logger.info("MCP safe mode is disabled (SAFE_MODE=false)")
 
     try:
         # Submit query to thread pool
@@ -102,7 +144,10 @@ def _execute_sql(sql: str) -> dict:
 @mcp.tool()
 async def execute_sql(sql: str) -> dict:
     """
-    Execute SQL query against Databend database.
+    Execute SQL query against Databend database with MCP safe mode protection.
+    
+    Safe mode (enabled by default) blocks dangerous operations like DROP, DELETE, 
+    TRUNCATE, ALTER, UPDATE, and REVOKE. Set SAFE_MODE=false to disable.
 
     Args:
         sql: SQL query string to execute
@@ -115,7 +160,7 @@ async def execute_sql(sql: str) -> dict:
 
 @mcp.tool()
 def show_databases():
-    """List available Databend databases"""
+    """List available Databend databases (safe operation, not affected by MCP safe mode)"""
     logger.info("Listing all databases")
     return _execute_sql("SHOW DATABASES")
 
@@ -123,7 +168,7 @@ def show_databases():
 @mcp.tool()
 def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
     """
-    List available Databend tables in a database
+    List available Databend tables in a database (safe operation, not affected by MCP safe mode)
     Args:
         database: The database name
         filter: The filter string, eg: "name like 'test%'"
@@ -143,7 +188,7 @@ def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
 @mcp.tool()
 def describe_table(table: str, database: Optional[str] = None):
     """
-    Describe a Databend table
+    Describe a Databend table (safe operation, not affected by MCP safe mode)
     Args:
         table: The table name
         database: The database name

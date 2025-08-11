@@ -6,10 +6,38 @@ An MCP server for Databend database interactions.
 
 ## What You Can Do
 
-- **execute_sql** - Execute SQL queries with timeout protection
+- **execute_sql** - Execute SQL queries with timeout protection and safe mode security
 - **show_databases** - List all databases
 - **show_tables** - List tables in a database (with optional filter)
 - **describe_table** - Get table schema information
+
+## Security Features
+
+### MCP Safe Mode (Enabled by Default)
+
+This server includes built-in security protection that blocks potentially dangerous SQL operations:
+
+- **Blocked Operations**: `DROP`, `DELETE`, `TRUNCATE`, `ALTER`, `UPDATE`, `REVOKE`
+
+**Safe Mode Configuration:**
+```json
+{
+  "env": {
+    "DATABEND_DSN": "your-connection-string-here",
+    "SAFE_MODE": "true"
+  }
+}
+```
+
+To disable safe mode (not recommended for production):
+```json
+{
+  "env": {
+    "DATABEND_DSN": "your-connection-string-here",
+    "SAFE_MODE": "false"
+  }
+}
+```
 
 ## How to Use
 
@@ -49,7 +77,8 @@ Add to your MCP client configuration (e.g., Claude Desktop, Windsurf):
       "command": "uv",
       "args": ["tool", "run", "mcp-databend"],
       "env": {
-        "DATABEND_DSN": "your-connection-string-here"
+        "DATABEND_DSN": "your-connection-string-here",
+        "SAFE_MODE": "true"
       }
     }
   }
