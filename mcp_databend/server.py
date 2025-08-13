@@ -204,6 +204,73 @@ def describe_table(table: str, database: Optional[str] = None):
     return execute_sql(sql)
 
 
+@mcp.tool()
+def show_stages():
+    """List available Databend stages (safe operation, not affected by MCP safe mode)"""
+    logger.info("Listing all stages")
+    return _execute_sql("SHOW STAGES")
+
+
+@mcp.tool()
+def list_stage_files(stage_name: str, path: Optional[str] = None):
+    """
+    List files in a Databend stage (safe operation, not affected by MCP safe mode)
+    Args:
+        stage_name: The stage name (with @ prefix)
+        path: Optional path within the stage
+
+    Returns:
+        Dictionary containing either query results or error information
+    """
+    if not stage_name.startswith('@'):
+        stage_name = f"@{stage_name}"
+    
+    if path:
+        stage_path = f"{stage_name}/{path.strip('/')}"
+    else:
+        stage_path = stage_name
+    
+    logger.info(f"Listing files in stage '{stage_path}'")
+    sql = f"LIST {stage_path}"
+    return _execute_sql(sql)
+
+
+@mcp.tool()
+def show_connections():
+    """List available Databend connections (safe operation, not affected by MCP safe mode)"""
+    logger.info("Listing all connections")
+    return _execute_sql("SHOW CONNECTIONS")
+
+
+@mcp.tool()
+async def create_stage(name: str, url: str, connection_name: Optional[str] = None, **kwargs) -> dict:
+    """
+    Create a Databend stage with connection
+    Args:
+        name: The stage name
+        url: The stage URL (e.g., 's3://bucket-name')
+        connection_name: Optional connection name to use
+        **kwargs: Additional stage options
+
+    Returns:
+        Dictionary containing either query results or error information
+    """
+    logger.info(f"Creating stage '{name}' with URL '{url}'")
+    
+    sql_parts = [f"CREATE STAGE {name}", f"URL = '{url}'"]
+    
+    if connection_name:
+        sql_parts.append(f"CONNECTION = (CONNECTION_NAME = '{connection_name}')")
+    
+    # Add any additional options from kwargs
+    for key, value in kwargs.items():
+        if key not in ['name', 'url', 'connection_name']:
+            sql_parts.append(f"{key.upper()} = '{value}'")
+    
+    sql = " ".join(sql_parts)
+    return _execute_sql(sql)
+
+
 def main():
     """Main entry point for the MCP server."""
     try:

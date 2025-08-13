@@ -6,10 +6,19 @@ An MCP server for Databend database interactions.
 
 ## What You Can Do
 
+### Database Operations
 - **execute_sql** - Execute SQL queries with timeout protection and safe mode security
 - **show_databases** - List all databases
 - **show_tables** - List tables in a database (with optional filter)
 - **describe_table** - Get table schema information
+
+### Stage Management
+- **show_stages** - List all available Databend stages
+- **list_stage_files** - List files in a specific stage (supports @stage_name format)
+- **create_stage** - Create a new stage with connection support
+
+### Connection Management
+- **show_connections** - List all available Databend connections
 
 ## Security Features
 
@@ -93,10 +102,20 @@ Add to your MCP client configuration (e.g., Claude Desktop, Windsurf):
 ### Step 4: Start Using
 
 Once configured, you can ask your AI assistant to:
+
+**Database Operations:**
 - "Show me all databases"
-- "List tables in the sales database"
+- "List tables in the sales database" 
 - "Describe the users table structure"
 - "Run this SQL query: SELECT * FROM products LIMIT 10"
+
+**Stage Management:**
+- "Show me all stages"
+- "List files in @my_stage"
+- "Create a stage named my_s3_stage with URL s3://my-bucket using connection my_connection"
+
+**Connection Management:**
+- "Show all connections"
 
 ## Development
 
