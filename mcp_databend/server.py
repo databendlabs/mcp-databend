@@ -181,7 +181,7 @@ def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
     if database is not None:
         sql += f" FROM {database}"
     if filter is not None:
-        sql += f" where '{filter}'"
+        sql += f" WHERE {filter}"
     return _execute_sql(sql)
 
 

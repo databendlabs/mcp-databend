@@ -162,7 +162,7 @@ cli = [
 
 [[package]]
 name = "mcp-databend"
-version = "0.1.1"
+version = "0.1.7"
 source = { editable = "." }
 dependencies = [
     { name = "databend-driver" },
