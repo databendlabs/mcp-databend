@@ -61,6 +61,9 @@ Get your connection string from [Databend documentation](https://docs.databend.c
 | **Databend Cloud** | `databend://user:pwd@host:443/database?warehouse=wh` |
 | **Self-hosted** | `databend://user:pwd@localhost:8000/database?sslmode=disable` |
 
+Or use local Databend by setting `LOCAL_MODE=true`, the metadata is stored in `.databend` directory:
+
+
 ### Step 2: Install
 
 ```bash
@@ -71,8 +74,14 @@ uv tool install mcp-databend
 
 #### Option A: Claude Code (CLI)
 
+- For Databend server:
 ```bash
 claude mcp add mcp-databend --env DATABEND_DSN='your-connection-string-here' -- uv tool run mcp-databend
+```
+
+- For local Databend:
+```bash
+claude mcp add mcp-databend --env -- uv tool run mcp-databend
 ```
 
 #### Option B: MCP Configuration (JSON)
@@ -105,7 +114,7 @@ Once configured, you can ask your AI assistant to:
 
 **Database Operations:**
 - "Show me all databases"
-- "List tables in the sales database" 
+- "List tables in the sales database"
 - "Describe the users table structure"
 - "Run this SQL query: SELECT * FROM products LIMIT 10"
 
@@ -127,4 +136,7 @@ uv sync
 
 # Run locally
 uv run python -m mcp_databend.main
+
+# Use modelcontextprotocol/inspector to debug
+npx @modelcontextprotocol/inspector -e LOCAL_MODE=1 uv run python -m mcp_databend.main
 ```

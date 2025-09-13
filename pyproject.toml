@@ -21,8 +21,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "databend>=1.2.810",
     "databend-driver>=0.27.3",
     "mcp>=1.9.0",
+    "pandas>=2.3.2",
+    "pyarrow>=21.0.0",
     "python-dotenv>=1.1.0",
 ]
 
