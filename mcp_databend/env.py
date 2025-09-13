@@ -33,7 +33,12 @@ class DatabendConfig:
     @property
     def local_mode(self) -> bool:
         """Get the local mode setting."""
-        return os.environ.get("LOCAL_MODE", "false").lower() in ("true", "1", "yes", "on")
+        return os.environ.get("LOCAL_MODE", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+            "on",
+        )
 
 
 # Global instance placeholder for the singleton pattern

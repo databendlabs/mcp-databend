@@ -35,6 +35,7 @@ mcp = FastMCP(SERVER_NAME)
 # Global Databend client singleton
 _databend_client = None
 
+
 def get_global_databend_client():
     """Get global Databend client instance (deprecated, use create_databend_client)."""
     global _databend_client
@@ -57,12 +58,12 @@ def is_sql_safe(sql: str) -> tuple[bool, str]:
 
     # List of dangerous operations to block in safe mode
     dangerous_patterns = [
-        (r'\bDROP\s+', "DROP operations are not allowed in MCP safe mode"),
-        (r'\bDELETE\s+', "DELETE operations are not allowed in MCP safe mode"),
-        (r'\bTRUNCATE\s+', "TRUNCATE operations are not allowed in MCP safe mode"),
-        (r'\bALTER\s+', "ALTER operations are not allowed in MCP safe mode"),
-        (r'\bUPDATE\s+', "UPDATE operations are not allowed in MCP safe mode"),
-        (r'\bREVOKE\s+', "REVOKE operations are not allowed in MCP safe mode"),
+        (r"\bDROP\s+", "DROP operations are not allowed in MCP safe mode"),
+        (r"\bDELETE\s+", "DELETE operations are not allowed in MCP safe mode"),
+        (r"\bTRUNCATE\s+", "TRUNCATE operations are not allowed in MCP safe mode"),
+        (r"\bALTER\s+", "ALTER operations are not allowed in MCP safe mode"),
+        (r"\bUPDATE\s+", "UPDATE operations are not allowed in MCP safe mode"),
+        (r"\bREVOKE\s+", "REVOKE operations are not allowed in MCP safe mode"),
     ]
 
     # Check each dangerous pattern
@@ -80,10 +81,12 @@ def create_databend_client():
     if config.local_mode:
         # Use local in-memory Databend
         import databend
+
         return databend.SessionContext()
     else:
         # Use remote Databend server
         from databend_driver import BlockingDatabendClient
+
         return BlockingDatabendClient(config.dsn)
 
 
@@ -105,7 +108,7 @@ def execute_databend_query(sql: str) -> list[dict] | dict:
             # Handle local in-memory Databend
             result = client.sql(sql)
             df = result.to_pandas()
-            return df.to_dict('records')
+            return df.to_dict("records")
         else:
             # Handle remote Databend server
             conn = client.get_conn()
@@ -164,6 +167,7 @@ def _execute_sql(sql: str) -> dict:
         error_msg = f"Unexpected error in query execution: {str(e)}"
         logger.error(error_msg)
         return {"status": "error", "message": error_msg}
+
 
 @mcp.tool()
 async def execute_sql(sql: str) -> dict:
@@ -246,7 +250,7 @@ async def list_stage_files(stage_name: str, path: Optional[str] = None):
     Returns:
         Dictionary containing either query results or error information
     """
-    if not stage_name.startswith('@'):
+    if not stage_name.startswith("@"):
         stage_name = f"@{stage_name}"
 
     if path:
@@ -267,7 +271,9 @@ async def show_connections():
 
 
 @mcp.tool()
-async def create_stage(name: str, url: str, connection_name: Optional[str] = None, **kwargs) -> dict:
+async def create_stage(
+    name: str, url: str, connection_name: Optional[str] = None, **kwargs
+) -> dict:
     """
     Create a Databend stage with connection
     Args:
@@ -288,7 +294,7 @@ async def create_stage(name: str, url: str, connection_name: Optional[str] = Non
 
     # Add any additional options from kwargs
     for key, value in kwargs.items():
-        if key not in ['name', 'url', 'connection_name']:
+        if key not in ["name", "url", "connection_name"]:
             sql_parts.append(f"{key.upper()} = '{value}'")
 
     sql = " ".join(sql_parts)
