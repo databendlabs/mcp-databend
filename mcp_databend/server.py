@@ -32,43 +32,62 @@ load_dotenv()
 # Initialize MCP server
 mcp = FastMCP(SERVER_NAME)
 
+# Global Databend client singleton
+_databend_client = None
+
+
+def get_global_databend_client():
+    """Get global Databend client instance (deprecated, use create_databend_client)."""
+    global _databend_client
+    if _databend_client is None:
+        _databend_client = create_databend_client()
+    return _databend_client
+
 
 def is_sql_safe(sql: str) -> tuple[bool, str]:
     """
     Check if SQL query is safe to execute in safe mode.
-    
+
     Args:
         sql: SQL query string to check
-        
+
     Returns:
         Tuple of (is_safe, reason) where is_safe is boolean and reason is error message if unsafe
     """
     sql_upper = sql.upper().strip()
-    
+
     # List of dangerous operations to block in safe mode
     dangerous_patterns = [
-        (r'\bDROP\s+', "DROP operations are not allowed in MCP safe mode"),
-        (r'\bDELETE\s+', "DELETE operations are not allowed in MCP safe mode"),
-        (r'\bTRUNCATE\s+', "TRUNCATE operations are not allowed in MCP safe mode"),
-        (r'\bALTER\s+', "ALTER operations are not allowed in MCP safe mode"),
-        (r'\bUPDATE\s+', "UPDATE operations are not allowed in MCP safe mode"),
-        (r'\bREVOKE\s+', "REVOKE operations are not allowed in MCP safe mode"),
+        (r"\bDROP\s+", "DROP operations are not allowed in MCP safe mode"),
+        (r"\bDELETE\s+", "DELETE operations are not allowed in MCP safe mode"),
+        (r"\bTRUNCATE\s+", "TRUNCATE operations are not allowed in MCP safe mode"),
+        (r"\bALTER\s+", "ALTER operations are not allowed in MCP safe mode"),
+        (r"\bUPDATE\s+", "UPDATE operations are not allowed in MCP safe mode"),
+        (r"\bREVOKE\s+", "REVOKE operations are not allowed in MCP safe mode"),
     ]
-    
+
     # Check each dangerous pattern
     for pattern, reason in dangerous_patterns:
         if re.search(pattern, sql_upper, re.IGNORECASE | re.DOTALL):
             return False, reason
-    
+
     return True, ""
 
 
 def create_databend_client():
     """Create and return a Databend client instance."""
     config = get_config()
-    from databend_driver import BlockingDatabendClient
 
-    return BlockingDatabendClient(config.dsn)
+    if config.local_mode:
+        # Use local in-memory Databend
+        import databend
+
+        return databend.SessionContext()
+    else:
+        # Use remote Databend server
+        from databend_driver import BlockingDatabendClient
+
+        return BlockingDatabendClient(config.dsn)
 
 
 def execute_databend_query(sql: str) -> list[dict] | dict:
@@ -81,20 +100,28 @@ def execute_databend_query(sql: str) -> list[dict] | dict:
     Returns:
         List of dictionaries containing query results or error dictionary
     """
-    client = create_databend_client()
-    conn = client.get_conn()
+    client = get_global_databend_client()
+    config = get_config()
 
     try:
-        cursor = conn.query_iter(sql)
-        column_names = [field.name for field in cursor.schema().fields()]
-        results = []
+        if config.local_mode:
+            # Handle local in-memory Databend
+            result = client.sql(sql)
+            df = result.to_pandas()
+            return df.to_dict("records")
+        else:
+            # Handle remote Databend server
+            conn = client.get_conn()
+            cursor = conn.query_iter(sql)
+            column_names = [field.name for field in cursor.schema().fields()]
+            results = []
 
-        for row in cursor:
-            row_data = dict(zip(column_names, list(row.values())))
-            results.append(row_data)
+            for row in cursor:
+                row_data = dict(zip(column_names, list(row.values())))
+                results.append(row_data)
 
-        logger.info(f"Query executed successfully, returned {len(results)} rows")
-        return results
+            logger.info(f"Query executed successfully, returned {len(results)} rows")
+            return results
 
     except Exception as err:
         error_msg = f"Error executing query: {str(err)}"
@@ -104,7 +131,7 @@ def execute_databend_query(sql: str) -> list[dict] | dict:
 
 def _execute_sql(sql: str) -> dict:
     logger.info(f"Executing SQL query: {sql}")
-    
+
     # Check safe mode configuration
     config = get_config()
     if config.safe_mode:
@@ -141,12 +168,13 @@ def _execute_sql(sql: str) -> dict:
         logger.error(error_msg)
         return {"status": "error", "message": error_msg}
 
+
 @mcp.tool()
 async def execute_sql(sql: str) -> dict:
     """
     Execute SQL query against Databend database with MCP safe mode protection.
-    
-    Safe mode (enabled by default) blocks dangerous operations like DROP, DELETE, 
+
+    Safe mode (enabled by default) blocks dangerous operations like DROP, DELETE,
     TRUNCATE, ALTER, UPDATE, and REVOKE. Set SAFE_MODE=false to disable.
 
     Args:
@@ -159,14 +187,14 @@ async def execute_sql(sql: str) -> dict:
 
 
 @mcp.tool()
-def show_databases():
+async def show_databases():
     """List available Databend databases (safe operation, not affected by MCP safe mode)"""
     logger.info("Listing all databases")
     return _execute_sql("SHOW DATABASES")
 
 
 @mcp.tool()
-def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
+async def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
     """
     List available Databend tables in a database (safe operation, not affected by MCP safe mode)
     Args:
@@ -186,7 +214,7 @@ def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
 
 
 @mcp.tool()
-def describe_table(table: str, database: Optional[str] = None):
+async def describe_table(table: str, database: Optional[str] = None):
     """
     Describe a Databend table (safe operation, not affected by MCP safe mode)
     Args:
@@ -201,7 +229,7 @@ def describe_table(table: str, database: Optional[str] = None):
         table = f"{database}.{table}"
     logger.info(f"Describing table '{table}'")
     sql = f"DESCRIBE TABLE {table}"
-    return execute_sql(sql)
+    return _execute_sql(sql)
 
 
 @mcp.tool()
@@ -212,7 +240,7 @@ def show_stages():
 
 
 @mcp.tool()
-def list_stage_files(stage_name: str, path: Optional[str] = None):
+async def list_stage_files(stage_name: str, path: Optional[str] = None):
     """
     List files in a Databend stage (safe operation, not affected by MCP safe mode)
     Args:
@@ -222,28 +250,30 @@ def list_stage_files(stage_name: str, path: Optional[str] = None):
     Returns:
         Dictionary containing either query results or error information
     """
-    if not stage_name.startswith('@'):
+    if not stage_name.startswith("@"):
         stage_name = f"@{stage_name}"
-    
+
     if path:
         stage_path = f"{stage_name}/{path.strip('/')}"
     else:
         stage_path = stage_name
-    
+
     logger.info(f"Listing files in stage '{stage_path}'")
     sql = f"LIST {stage_path}"
     return _execute_sql(sql)
 
 
 @mcp.tool()
-def show_connections():
+async def show_connections():
     """List available Databend connections (safe operation, not affected by MCP safe mode)"""
     logger.info("Listing all connections")
     return _execute_sql("SHOW CONNECTIONS")
 
 
 @mcp.tool()
-async def create_stage(name: str, url: str, connection_name: Optional[str] = None, **kwargs) -> dict:
+async def create_stage(
+    name: str, url: str, connection_name: Optional[str] = None, **kwargs
+) -> dict:
     """
     Create a Databend stage with connection
     Args:
@@ -256,17 +286,17 @@ async def create_stage(name: str, url: str, connection_name: Optional[str] = Non
         Dictionary containing either query results or error information
     """
     logger.info(f"Creating stage '{name}' with URL '{url}'")
-    
+
     sql_parts = [f"CREATE STAGE {name}", f"URL = '{url}'"]
-    
+
     if connection_name:
         sql_parts.append(f"CONNECTION = (CONNECTION_NAME = '{connection_name}')")
-    
+
     # Add any additional options from kwargs
     for key, value in kwargs.items():
-        if key not in ['name', 'url', 'connection_name']:
+        if key not in ["name", "url", "connection_name"]:
             sql_parts.append(f"{key.upper()} = '{value}'")
-    
+
     sql = " ".join(sql_parts)
     return _execute_sql(sql)
 
