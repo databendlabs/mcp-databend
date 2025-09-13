@@ -81,7 +81,7 @@ claude mcp add mcp-databend --env DATABEND_DSN='your-connection-string-here' -- 
 
 - For local Databend:
 ```bash
-claude mcp add mcp-databend --env -- uv tool run mcp-databend
+claude mcp add mcp-databend --env LOCAL_MODE=true -- uv tool run mcp-databend
 ```
 
 #### Option B: MCP Configuration (JSON)
