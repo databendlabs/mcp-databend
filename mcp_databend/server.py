@@ -6,6 +6,7 @@ import re
 from mcp.server.fastmcp import FastMCP
 import concurrent.futures
 from dotenv import load_dotenv
+import pyarrow as pa
 import atexit
 from typing import Optional
 from .env import get_config
@@ -107,8 +108,8 @@ def execute_databend_query(sql: str) -> list[dict] | dict:
         if config.local_mode:
             # Handle local in-memory Databend
             result = client.sql(sql)
-            df = result.to_pandas()
-            return df.to_dict("records")
+            df = result.to_py_arrow()
+            return recordbatches_to_dicts(df)
         else:
             # Handle remote Databend server
             conn = client.get_conn()
@@ -127,6 +128,15 @@ def execute_databend_query(sql: str) -> list[dict] | dict:
         error_msg = f"Error executing query: {str(err)}"
         logger.error(error_msg)
         return {"error": error_msg}
+
+def recordbatches_to_dicts(batches: list[pa.RecordBatch]) -> list[dict]:
+    results = []
+    for batch in batches:
+        columns = batch.schema.names
+        columns_data = [batch.column(i).to_pylist() for i in range(batch.num_columns)]
+        for row in zip(*columns_data):
+            results.append(dict(zip(columns, row)))
+    return results
 
 
 def _execute_sql(sql: str) -> dict:
