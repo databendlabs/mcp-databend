@@ -3,13 +3,14 @@ import os
 import logging
 import sys
 import re
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
+from fastmcp.tools import Tool
 import concurrent.futures
 from dotenv import load_dotenv
 import pyarrow as pa
 import atexit
 from typing import Optional
-from .env import get_config
+from .env import get_config, TransportType
 
 # Constants
 SERVER_NAME = "mcp-databend"
@@ -165,7 +166,11 @@ def _execute_sql(sql: str) -> dict:
                 logger.warning(error_msg)
                 return {"status": "error", "message": error_msg}
 
-            return result
+            # Ensure we always return a dict structure for fastmcp compatibility
+            if isinstance(result, list):
+                return {"status": "success", "data": result, "row_count": len(result)}
+            else:
+                return {"status": "success", "data": result}
 
         except concurrent.futures.TimeoutError:
             error_msg = f"Query timed out after {DEFAULT_TIMEOUT} seconds"
@@ -179,8 +184,7 @@ def _execute_sql(sql: str) -> dict:
         return {"status": "error", "message": error_msg}
 
 
-@mcp.tool()
-async def execute_sql(sql: str) -> dict:
+def execute_sql(sql: str) -> dict:
     """
     Execute SQL query against Databend database with MCP safe mode protection.
 
@@ -196,15 +200,13 @@ async def execute_sql(sql: str) -> dict:
     return _execute_sql(sql)
 
 
-@mcp.tool()
-async def show_databases():
+def show_databases():
     """List available Databend databases (safe operation, not affected by MCP safe mode)"""
     logger.info("Listing all databases")
     return _execute_sql("SHOW DATABASES")
 
 
-@mcp.tool()
-async def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
+def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
     """
     List available Databend tables in a database (safe operation, not affected by MCP safe mode)
     Args:
@@ -222,9 +224,20 @@ async def show_tables(database: Optional[str] = None, filter: Optional[str] = No
         sql += f" WHERE {filter}"
     return _execute_sql(sql)
 
+def show_functions(filter: Optional[str] = None):
+    """List available Databend functions (safe operation, not affected by MCP safe mode)
+    Args:
+        filter: The filter string, eg: "name like 'add%'"
+    Returns:
+        Dictionary containing either query results or error information
+    """
+    logger.info("Listing all functions")
+    sql = "SHOW FUNCTIONS"
+    if filter is not None:
+        sql += f" WHERE {filter}"
+    return _execute_sql(sql)
 
-@mcp.tool()
-async def describe_table(table: str, database: Optional[str] = None):
+def describe_table(table: str, database: Optional[str] = None):
     """
     Describe a Databend table (safe operation, not affected by MCP safe mode)
     Args:
@@ -242,15 +255,13 @@ async def describe_table(table: str, database: Optional[str] = None):
     return _execute_sql(sql)
 
 
-@mcp.tool()
 def show_stages():
     """List available Databend stages (safe operation, not affected by MCP safe mode)"""
     logger.info("Listing all stages")
     return _execute_sql("SHOW STAGES")
 
 
-@mcp.tool()
-async def list_stage_files(stage_name: str, path: Optional[str] = None):
+def list_stage_files(stage_name: str, path: Optional[str] = None):
     """
     List files in a Databend stage (safe operation, not affected by MCP safe mode)
     Args:
@@ -273,16 +284,14 @@ async def list_stage_files(stage_name: str, path: Optional[str] = None):
     return _execute_sql(sql)
 
 
-@mcp.tool()
-async def show_connections():
+def show_connections():
     """List available Databend connections (safe operation, not affected by MCP safe mode)"""
     logger.info("Listing all connections")
     return _execute_sql("SHOW CONNECTIONS")
 
 
-@mcp.tool()
-async def create_stage(
-    name: str, url: str, connection_name: Optional[str] = None, **kwargs
+def create_stage(
+    name: str, url: str, connection_name: Optional[str] = None
 ) -> dict:
     """
     Create a Databend stage with connection
@@ -290,7 +299,6 @@ async def create_stage(
         name: The stage name
         url: The stage URL (e.g., 's3://bucket-name')
         connection_name: Optional connection name to use
-        **kwargs: Additional stage options
 
     Returns:
         Dictionary containing either query results or error information
@@ -302,20 +310,39 @@ async def create_stage(
     if connection_name:
         sql_parts.append(f"CONNECTION = (CONNECTION_NAME = '{connection_name}')")
 
-    # Add any additional options from kwargs
-    for key, value in kwargs.items():
-        if key not in ["name", "url", "connection_name"]:
-            sql_parts.append(f"{key.upper()} = '{value}'")
-
     sql = " ".join(sql_parts)
     return _execute_sql(sql)
+
+
+# Register all tools
+mcp.add_tool(Tool.from_function(execute_sql))
+mcp.add_tool(Tool.from_function(show_databases))
+mcp.add_tool(Tool.from_function(show_tables))
+mcp.add_tool(Tool.from_function(show_functions))
+mcp.add_tool(Tool.from_function(describe_table))
+mcp.add_tool(Tool.from_function(show_stages))
+mcp.add_tool(Tool.from_function(list_stage_files))
+mcp.add_tool(Tool.from_function(show_connections))
+mcp.add_tool(Tool.from_function(create_stage))
 
 
 def main():
     """Main entry point for the MCP server."""
     try:
-        logger.info("Starting Databend MCP Server...")
-        mcp.run()
+        config = get_config()
+        transport = config.mcp_server_transport
+
+        logger.info(f"Starting Databend MCP Server with transport: {transport}")
+
+        # For HTTP and SSE transports, we need to specify host and port
+        http_transports = [TransportType.HTTP.value, TransportType.SSE.value]
+        if transport in http_transports:
+            # Use the configured bind host (defaults to 127.0.0.1, can be set to 0.0.0.0)
+            # and bind port (defaults to 8001)
+            mcp.run(transport=transport, host=config.mcp_bind_host, port=config.mcp_bind_port)
+        else:
+            # For stdio transport, no host or port is needed
+            mcp.run(transport=transport)
     except KeyboardInterrupt:
         logger.info("Shutting down server by user request")
     except Exception as e:

@@ -2,6 +2,19 @@
 
 from dataclasses import dataclass
 import os
+from enum import Enum
+
+
+class TransportType(Enum):
+    """Transport types for MCP server."""
+    STDIO = "stdio"
+    HTTP = "http"
+    SSE = "sse"
+
+    @classmethod
+    def values(cls):
+        """Get all transport type values."""
+        return [member.value for member in cls]
 
 
 @dataclass
@@ -39,6 +52,46 @@ class DatabendConfig:
             "yes",
             "on",
         )
+
+    @property
+    def mcp_server_transport(self) -> str:
+        """Get the MCP server transport method.
+
+        Valid options: "stdio", "http", "sse"
+        Default: "stdio"
+        """
+        transport = os.getenv("DATABEND_MCP_SERVER_TRANSPORT", TransportType.STDIO.value).lower()
+
+        # Validate transport type
+        if transport not in TransportType.values():
+            valid_options = ", ".join(f'"{t}"' for t in TransportType.values())
+            raise ValueError(f"Invalid transport '{transport}'. Valid options: {valid_options}")
+        return transport
+
+    @property
+    def mcp_bind_host(self) -> str:
+        """Get the MCP server bind host for HTTP/SSE transports.
+
+        Default: "127.0.0.1"
+        """
+        return os.getenv("DATABEND_MCP_BIND_HOST", "127.0.0.1")
+
+    @property
+    def mcp_bind_port(self) -> int:
+        """Get the MCP server bind port for HTTP/SSE transports.
+
+        Default: 8001
+        """
+        port_str = os.getenv("DATABEND_MCP_BIND_PORT", "8001")
+        try:
+            port = int(port_str)
+            if port < 1 or port > 65535:
+                raise ValueError(f"Port must be between 1 and 65535, got {port}")
+            return port
+        except ValueError as e:
+            if "invalid literal" in str(e):
+                raise ValueError(f"Invalid port value '{port_str}'. Must be a valid integer.")
+            raise
 
 
 # Global instance placeholder for the singleton pattern
