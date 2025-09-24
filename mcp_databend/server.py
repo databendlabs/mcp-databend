@@ -81,11 +81,12 @@ def create_databend_client():
     config = get_config()
 
     if config.local_mode:
+        logger.info("Creating Databend client local")
         # Use local in-memory Databend
         import databend
-
         return databend.SessionContext()
     else:
+        logger.info("Creating Databend client dsn")
         # Use remote Databend server
         from databend_driver import BlockingDatabendClient
 
@@ -183,6 +184,24 @@ def _execute_sql(sql: str) -> dict:
         logger.error(error_msg)
         return {"status": "error", "message": error_msg}
 
+
+def execute_multi_sql(sqls: list[str]) -> list[dict]:
+    """
+    Execute multiple SQL queries against Databend database with MCP safe mode protection.
+
+    Safe mode (enabled by default) blocks dangerous operations like DROP, DELETE,
+    TRUNCATE, ALTER, UPDATE, and REVOKE. Set SAFE_MODE=false to disable.
+
+    Args:
+        sqls: List of SQL query strings to execute
+
+    Returns:
+        List of dictionaries containing either query results or error information
+    """
+    results = []
+    for sql in sqls:
+        results.append(execute_sql(sql))
+    return results
 
 def execute_sql(sql: str) -> dict:
     """
@@ -316,6 +335,7 @@ def create_stage(
 
 # Register all tools
 mcp.add_tool(Tool.from_function(execute_sql))
+mcp.add_tool(Tool.from_function(execute_multi_sql))
 mcp.add_tool(Tool.from_function(show_databases))
 mcp.add_tool(Tool.from_function(show_tables))
 mcp.add_tool(Tool.from_function(show_functions))
