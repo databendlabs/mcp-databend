@@ -113,6 +113,7 @@ Add to your MCP client configuration (e.g., Claude Desktop, Windsurf):
 - `DATABEND_DSN`: Databend connection string
 - `LOCAL_MODE`: Set to `true` to use local Databend
 - `SAFE_MODE`: Set to `false` to disable safe mode
+- `DATABEND_QUERY_TIMEOUT`: Query execution timeout in seconds (default: `300`)
 - `DATABEND_MCP_SERVER_TRANSPORT`: Default to `stdio`, set to `http` or `sse` to enable HTTP/SSE transport
 - `DATABEND_MCP_BIND_HOST`: Default to `127.0.0.1`, set to bind host for HTTP/SSE transport
 - `DATABEND_MCP_BIND_PORT`: Default to `8001`, set to bind port for HTTP/SSE transport

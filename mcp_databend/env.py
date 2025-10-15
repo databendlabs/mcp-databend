@@ -25,6 +25,7 @@ class DatabendConfig:
         DATABEND_DSN: The dsn connect string (defaults to: "databend://default:@127.0.0.1:8000/?sslmode=disable")
         SAFE_MODE: Enable safe mode to restrict dangerous SQL operations (defaults to: "true")
         LOCAL_MODE: Enable local mode to use in-memory Databend (defaults to: "false")
+        DATABEND_QUERY_TIMEOUT: Query execution timeout in seconds (defaults to: "300")
     """
 
     def __init__(self):
@@ -91,6 +92,23 @@ class DatabendConfig:
         except ValueError as e:
             if "invalid literal" in str(e):
                 raise ValueError(f"Invalid port value '{port_str}'. Must be a valid integer.")
+            raise
+
+    @property
+    def query_timeout(self) -> int:
+        """Get the query execution timeout in seconds.
+
+        Default: 300
+        """
+        timeout_str = os.getenv("DATABEND_QUERY_TIMEOUT", "300")
+        try:
+            timeout = int(timeout_str)
+            if timeout < 1:
+                raise ValueError(f"Query timeout must be greater than 0, got {timeout}")
+            return timeout
+        except ValueError as e:
+            if "invalid literal" in str(e):
+                raise ValueError(f"Invalid query timeout value '{timeout_str}'. Must be a valid integer.")
             raise
 
 

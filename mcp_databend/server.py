@@ -14,7 +14,6 @@ from .env import get_config, TransportType
 
 # Constants
 SERVER_NAME = "mcp-databend"
-DEFAULT_TIMEOUT = 60  # seconds
 
 # Configure logging
 logging.basicConfig(
@@ -158,9 +157,10 @@ def _execute_sql(sql: str) -> dict:
     try:
         # Submit query to thread pool
         future = QUERY_EXECUTOR.submit(execute_databend_query, sql)
+        query_timeout = config.query_timeout
         try:
             # Wait for query to complete with timeout
-            result = future.result(timeout=DEFAULT_TIMEOUT)
+            result = future.result(timeout=query_timeout)
 
             if isinstance(result, dict) and "error" in result:
                 error_msg = f"Query execution failed: {result['error']}"
@@ -174,7 +174,7 @@ def _execute_sql(sql: str) -> dict:
                 return {"status": "success", "data": result}
 
         except concurrent.futures.TimeoutError:
-            error_msg = f"Query timed out after {DEFAULT_TIMEOUT} seconds"
+            error_msg = f"Query timed out after {query_timeout} seconds"
             logger.warning(f"{error_msg}: {sql}")
             future.cancel()
             return {"status": "error", "message": error_msg}
