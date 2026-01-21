@@ -23,7 +23,6 @@ class DatabendConfig:
 
     Required environment variables:
         DATABEND_DSN: The dsn connect string (defaults to: "databend://default:@127.0.0.1:8000/?sslmode=disable")
-        SAFE_MODE: Enable safe mode to restrict dangerous SQL operations (defaults to: "true")
         LOCAL_MODE: Enable local mode to use in-memory Databend (defaults to: "false")
         DATABEND_QUERY_TIMEOUT: Query execution timeout in seconds (defaults to: "300")
     """
@@ -38,11 +37,6 @@ class DatabendConfig:
         return os.environ.get(
             "DATABEND_DSN", "databend://default:@127.0.0.1:8000/?sslmode=disable"
         )
-
-    @property
-    def safe_mode(self) -> bool:
-        """Get the safe mode setting."""
-        return os.environ.get("SAFE_MODE", "true").lower() in ("true", "1", "yes", "on")
 
     @property
     def local_mode(self) -> bool:
