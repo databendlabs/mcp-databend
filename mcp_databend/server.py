@@ -11,6 +11,7 @@ import pyarrow as pa
 import atexit
 from typing import Optional
 from .env import get_config, TransportType
+from .safety import check_sql_safety, get_session_prefix, SANDBOX_PREFIX, SESSION_ID
 
 # Constants
 SERVER_NAME = "mcp-databend"
@@ -45,34 +46,6 @@ def get_global_databend_client():
     return _databend_client
 
 
-def is_sql_safe(sql: str) -> tuple[bool, str]:
-    """
-    Check if SQL query is safe to execute in safe mode.
-
-    Args:
-        sql: SQL query string to check
-
-    Returns:
-        Tuple of (is_safe, reason) where is_safe is boolean and reason is error message if unsafe
-    """
-    sql_upper = sql.upper().strip()
-
-    # List of dangerous operations to block in safe mode
-    dangerous_patterns = [
-        (r"\bDROP\s+", "DROP operations are not allowed in MCP safe mode"),
-        (r"\bDELETE\s+", "DELETE operations are not allowed in MCP safe mode"),
-        (r"\bTRUNCATE\s+", "TRUNCATE operations are not allowed in MCP safe mode"),
-        (r"\bALTER\s+", "ALTER operations are not allowed in MCP safe mode"),
-        (r"\bUPDATE\s+", "UPDATE operations are not allowed in MCP safe mode"),
-        (r"\bREVOKE\s+", "REVOKE operations are not allowed in MCP safe mode"),
-    ]
-
-    # Check each dangerous pattern
-    for pattern, reason in dangerous_patterns:
-        if re.search(pattern, sql_upper, re.IGNORECASE | re.DOTALL):
-            return False, reason
-
-    return True, ""
 
 
 def create_databend_client():
@@ -143,21 +116,16 @@ def recordbatches_to_dicts(batches: list[pa.RecordBatch]) -> list[dict]:
 def _execute_sql(sql: str) -> dict:
     logger.info(f"Executing SQL query: {sql}")
 
-    # Check safe mode configuration
-    config = get_config()
-    if config.safe_mode:
-        is_safe, reason = is_sql_safe(sql)
-        if not is_safe:
-            error_msg = f"Query blocked by MCP safe mode: {reason}. Current mode: SAFE_MODE=true. To disable, set SAFE_MODE=false"
-            logger.warning(f"{error_msg} - Query: {sql}")
-            return {"status": "error", "message": error_msg}
-    else:
-        logger.info("MCP safe mode is disabled (SAFE_MODE=false)")
+    # Code-enforced safety check - cannot be bypassed
+    result = check_sql_safety(sql)
+    if not result.allowed:
+        logger.warning(f"Query blocked: {result.reason} - SQL: {sql}")
+        return {"status": "error", "message": result.reason}
 
     try:
         # Submit query to thread pool
         future = QUERY_EXECUTOR.submit(execute_databend_query, sql)
-        query_timeout = config.query_timeout
+        query_timeout = get_config().query_timeout
         try:
             # Wait for query to complete with timeout
             result = future.result(timeout=query_timeout)
@@ -205,16 +173,19 @@ def execute_multi_sql(sqls: list[str]) -> list[dict]:
 
 def execute_sql(sql: str) -> dict:
     """
-    Execute SQL query against Databend database with MCP safe mode protection.
+    Execute SQL query against Databend database.
 
-    Safe mode (enabled by default) blocks dangerous operations like DROP, DELETE,
-    TRUNCATE, ALTER, UPDATE, and REVOKE. Set SAFE_MODE=false to disable.
+    SAFETY RULES (enforced by code):
+    - Read operations (SELECT/SHOW/DESCRIBE/EXPLAIN/LIST): allowed on ALL objects
+    - Write operations (CREATE/DROP/INSERT/UPDATE/DELETE/...): ONLY allowed on current session's sandbox
+    - Current session sandbox prefix: use get_session_sandbox_prefix() to get it
+    - CREATE OR REPLACE: FORBIDDEN - use DROP then CREATE instead
 
     Args:
         sql: SQL query string to execute
 
     Returns:
-        Dictionary containing either query results or error information
+        Dictionary containing query results or error information
     """
     return _execute_sql(sql)
 
@@ -333,6 +304,59 @@ def create_stage(
     return _execute_sql(sql)
 
 
+def get_session_sandbox_prefix() -> dict:
+    """
+    Get current session's sandbox prefix for writable objects.
+
+    All write operations (CREATE/DROP/INSERT/UPDATE/DELETE/...) are ONLY
+    allowed on objects with this prefix. This is enforced by code, not just guidelines.
+
+    Returns:
+        Dictionary with session_id and prefix
+    """
+    return {
+        "session_id": SESSION_ID,
+        "prefix": get_session_prefix(),
+        "example_database": f"{get_session_prefix()}mydb",
+        "example_table": f"{get_session_prefix()}mydb.mytable"
+    }
+
+
+def list_session_sandbox_databases() -> dict:
+    """
+    List sandbox databases owned by current session.
+
+    Only these databases can be modified. Other databases are read-only.
+
+    Returns:
+        Dictionary containing current session's sandbox database list
+    """
+    prefix = get_session_prefix()
+    return _execute_sql(f"SHOW DATABASES LIKE '{prefix}%'")
+
+
+def create_session_sandbox_database(name: str) -> dict:
+    """
+    Create a new sandbox database for current session.
+
+    The database name will be automatically prefixed with current session's sandbox prefix.
+
+    Args:
+        name: Database name suffix (without prefix)
+
+    Example:
+        create_session_sandbox_database('analytics')
+        -> Creates 'mcp_sandbox_a1b2c3d4_analytics'
+
+    Returns:
+        Dictionary containing result or error
+    """
+    if not name or not re.match(r'^\w+$', name):
+        return {"status": "error", "message": "Invalid database name"}
+    db_name = f"{get_session_prefix()}{name}"
+    return _execute_sql(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+
+
 # Register all tools
 mcp.add_tool(Tool.from_function(execute_sql))
 mcp.add_tool(Tool.from_function(execute_multi_sql))
@@ -344,6 +368,9 @@ mcp.add_tool(Tool.from_function(show_stages))
 mcp.add_tool(Tool.from_function(list_stage_files))
 mcp.add_tool(Tool.from_function(show_connections))
 mcp.add_tool(Tool.from_function(create_stage))
+mcp.add_tool(Tool.from_function(get_session_sandbox_prefix))
+mcp.add_tool(Tool.from_function(list_session_sandbox_databases))
+mcp.add_tool(Tool.from_function(create_session_sandbox_database))
 
 
 def main():
