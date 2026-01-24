@@ -2,82 +2,100 @@
 
 [![PyPI - Version](https://img.shields.io/pypi/v/mcp-databend)](https://pypi.org/project/mcp-databend)
 
-**Connect AI assistants to your Databend database safely.** This MCP server enables Claude, Cursor, and other AI tools to query and analyze your data without risking production changes.
+Connect AI agents to your Databend database safely. Session sandbox keeps production read-only while agents experiment. Works with Codex, Cursor, Claude Code, Gemini CLI, and any MCP-compatible client. Learn more at [databend.com/mcp](https://www.databend.com/mcp/).
 
-Works with Claude Desktop, Claude Code, Cursor, Windsurf, Codex, Gemini CLI, and any MCP-compatible agent. Learn more at [databend.com/mcp](https://www.databend.com/mcp/).
+## Usage
 
-## What is MCP?
+1. Get your Databend DSN.
+   Format: `databend://user:password@host:port/database?warehouse=your_warehouse`
+   Get it from [Databend Cloud](https://app.databend.com) or the [docs](https://docs.databend.com/developer/drivers/#connection-string-dsn).
+2. Session sandbox safety: writes only to `mcp_sandbox_{session_id}_*`; production stays read-only.
+   Use `get_session_sandbox_prefix` to retrieve the live prefix.
+3. Configure your MCP client.
 
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io) lets AI assistants securely access external data sources. This server gives AI read access to your entire database, while restricting writes to isolated sandbox areas.
+**Standard config** works in most tools:
 
-**Use Cases:**
-- Ask AI to analyze sales data: "Show me top customers this quarter"
-- Generate reports: "Create a summary table of user signups by region"
-- Debug queries: "Why is this query slow?"
-- Explore schema: "What tables contain customer information?"
-
-AI can freely experiment in its sandbox without affecting production data.
-
-## Why Safe?
-
-**Session Sandbox Isolation** - Each AI session gets a unique prefix (`mcp_sandbox_{session_id}_`):
-- ✅ AI can freely create/modify/delete objects with its prefix
-- ✅ AI can read all data (SELECT, SHOW, DESCRIBE)
-- ❌ AI cannot modify production data
-
-**Example:**
-```sql
--- ✅ AI can do this safely in sandbox
-CREATE DATABASE mcp_sandbox_abc123_analysis
-CREATE OR REPLACE TABLE mcp_sandbox_abc123_analysis.results (id INT)
-INSERT INTO mcp_sandbox_abc123_analysis.results VALUES (1)
-UPDATE mcp_sandbox_abc123_analysis.results SET id=2
-DROP TABLE mcp_sandbox_abc123_analysis.results
-SELECT * FROM production.sales  -- Read-only access
-
--- ❌ AI cannot do this
-DROP TABLE production.users
-UPDATE production.orders SET status='cancelled'
-CREATE OR REPLACE TABLE production.temp (id INT)
-```
-
-**Defense in Depth:**
-1. Database user permissions (primary)
-2. MCP sandbox validation (additional layer)
-3. SQL standardization to prevent bypass attempts
-
-## Quick Start
-
-### Install
-```bash
-uv tool install mcp-databend
-```
-
-### Configure
-
-**Claude Code:**
-```bash
-claude mcp add mcp-databend --env DATABEND_DSN='databend://user:pwd@host:443/db?warehouse=wh' -- uv tool run mcp-databend
-```
-
-**Other MCP Clients:**
-```json
+```js
 {
   "mcpServers": {
-    "mcp-databend": {
+    "databend": {
       "command": "uv",
-      "args": ["tool", "run", "mcp-databend"],
+      "args": ["tool", "run", "--from", "mcp-databend@latest", "mcp-databend"],
       "env": {
-        "DATABEND_DSN": "databend://user:pwd@host:443/db?warehouse=wh"
+        "DATABEND_DSN": "databend://user:password@host:port/database?warehouse=your_warehouse"
       }
     }
   }
 }
 ```
 
-Get your connection string from [Databend Cloud](https://app.databend.com) (free tier) or [docs](https://docs.databend.com/developer/drivers/#connection-string-dsn).
+<details>
+<summary>Codex</summary>
 
-**Local Mode:** Set `LOCAL_MODE=true` to use embedded Databend (stores in `.databend/`).
+Use the Codex CLI to add the Databend MCP server:
+
+```bash
+codex mcp add databend \
+  --env DATABEND_DSN='databend://user:password@host:port/database?warehouse=your_warehouse' \
+  -- uv tool run --from mcp-databend@latest mcp-databend
+```
+
+</details>
+
+<details>
+<summary>Claude Code</summary>
+
+Use the Claude Code CLI to add the Databend MCP server:
+
+```bash
+claude mcp add databend \
+  --env DATABEND_DSN='databend://user:password@host:port/database?warehouse=your_warehouse' \
+  -- uv tool run --from mcp-databend@latest mcp-databend
+```
+
+</details>
+
+<details>
+<summary>Cursor</summary>
+
+#### Click the button to install:
+
+[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install in Cursor">](https://cursor.com/en/install-mcp?name=Databend&config=eyJjb21tYW5kIjoidXYgdG9vbCBydW4gLS1mcm9tIG1jcC1kYXRhYmVuZEBsYXRlc3QgbWNwLWRhdGFiZW5kIn0%3D)
+
+Then open `Cursor Settings` -> `MCP`, select `Databend`, click `Edit`, and add `DATABEND_DSN` to the env section. Cursor keeps the command as a single string:
+
+```json
+{
+  "mcpServers": {
+    "Databend": {
+      "command": "uv tool run --from mcp-databend@latest mcp-databend",
+      "env": {
+        "DATABEND_DSN": "databend://user:password@host:port/database?warehouse=your_warehouse"
+      },
+      "args": []
+    }
+  }
+}
+```
+
+#### Or install manually:
+
+Go to `Cursor Settings` -> `MCP` -> `Add new MCP Server`. Paste command `uv tool run --from mcp-databend@latest mcp-databend`, then click `Edit` and add `DATABEND_DSN` in env.
+
+</details>
+
+<details>
+<summary>Gemini CLI</summary>
+
+Add the standard config above to your Gemini CLI `settings.json`.
+
+</details>
+
+## Safety Guarantees
+
+- Session sandbox isolation: each session gets a unique `mcp_sandbox_{session_id}_` prefix for writes.
+- Read-only production access: SELECT/SHOW/DESCRIBE allowed; writes outside sandbox blocked.
+- SQL safety validation: queries are standardized and checked by rule-based guardrails.
 
 ## Available Tools
 
@@ -99,11 +117,13 @@ Get your connection string from [Databend Cloud](https://app.databend.com) (free
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABEND_DSN` | - | Connection string |
-| `LOCAL_MODE` | `false` | Use local Databend |
+| `LOCAL_MODE` | `false` | Use embedded Databend |
 | `DATABEND_QUERY_TIMEOUT` | `300` | Query timeout (seconds) |
 | `DATABEND_MCP_SERVER_TRANSPORT` | `stdio` | Transport: `stdio`, `http`, `sse` |
 | `DATABEND_MCP_BIND_HOST` | `127.0.0.1` | Bind host for HTTP/SSE |
 | `DATABEND_MCP_BIND_PORT` | `8001` | Bind port for HTTP/SSE |
+
+Local mode stores data in `.databend/`.
 
 ## Development
 
@@ -116,7 +136,7 @@ uv sync
 uv run python -m mcp_databend.main
 
 # Debug
-npx @modelcontextprotocol/inspector -e LOCAL_MODE=1 uv run python -m mcp_databend.main
+npx @modelcontextprotocol/inspector uv run python -m mcp_databend.main
 
 # Test
 uv run pytest
