@@ -86,6 +86,35 @@ class TestBlockedOperations:
         result = check_sql_safety(sql)
         assert result.allowed is True
 
+    def test_create_or_replace_additional_objects_allowed(self):
+        prefix = get_session_prefix()
+        sqls = [
+            f"CREATE OR REPLACE SEQUENCE {prefix}seq",
+            f"CREATE OR REPLACE PROCEDURE {prefix}proc AS $$ SELECT 1 $$",
+            f"CREATE OR REPLACE DICTIONARY {prefix}db.dict (id INT) SOURCE(mysql)",
+            f"CREATE OR REPLACE FILE FORMAT {prefix}ff TYPE = CSV",
+            f"CREATE OR REPLACE NETWORK POLICY {prefix}np ALLOWED_IP_LIST = ('1.1.1.1')",
+            f"CREATE OR REPLACE PASSWORD POLICY {prefix}pp PASSWORD_MIN_LENGTH = 8",
+            f"CREATE OR REPLACE DYNAMIC TABLE {prefix}db.dt AS SELECT 1",
+        ]
+        for sql in sqls:
+            result = check_sql_safety(sql)
+            assert result.allowed is True
+
+    def test_create_or_replace_additional_objects_blocked(self):
+        sqls = [
+            "CREATE OR REPLACE SEQUENCE seq",
+            "CREATE OR REPLACE PROCEDURE proc AS $$ SELECT 1 $$",
+            "CREATE OR REPLACE DICTIONARY prod_db.dict (id INT) SOURCE(mysql)",
+            "CREATE OR REPLACE FILE FORMAT ff TYPE = CSV",
+            "CREATE OR REPLACE NETWORK POLICY np ALLOWED_IP_LIST = ('1.1.1.1')",
+            "CREATE OR REPLACE PASSWORD POLICY pp PASSWORD_MIN_LENGTH = 8",
+            "CREATE OR REPLACE DYNAMIC TABLE prod_db.dt AS SELECT 1",
+        ]
+        for sql in sqls:
+            result = check_sql_safety(sql)
+            assert result.allowed is False
+
     def test_create_or_replace_non_sandbox_blocked(self):
         sql = "CREATE OR REPLACE TABLE production.users (id INT)"
         result = check_sql_safety(sql)
@@ -200,6 +229,32 @@ class TestNestedSQL:
         result = check_sql_safety(sql)
         assert result.allowed is True
 
+    def test_dynamic_table_with_sandbox_query_allowed(self):
+        prefix = get_session_prefix()
+        sql = f"CREATE DYNAMIC TABLE {prefix}db.dt AS SELECT * FROM {prefix}db.t"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_dynamic_table_with_non_sandbox_query_blocked(self):
+        prefix = get_session_prefix()
+        sql = f"CREATE DYNAMIC TABLE {prefix}db.dt AS SELECT * FROM production.t"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+        assert "Referenced object" in result.reason
+
+    def test_index_with_sandbox_query_allowed(self):
+        prefix = get_session_prefix()
+        sql = f"CREATE AGGREGATING INDEX {prefix}idx AS SELECT * FROM {prefix}db.t"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_index_with_non_sandbox_query_blocked(self):
+        prefix = get_session_prefix()
+        sql = f"CREATE AGGREGATING INDEX {prefix}idx AS SELECT * FROM production.t"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+        assert "Referenced object" in result.reason
+
 
 class TestGrantRevoke:
     """GRANT/REVOKE privilege operation tests."""
@@ -221,6 +276,50 @@ class TestGrantRevoke:
         sql = "GRANT ROLE admin TO user1"
         result = check_sql_safety(sql)
         assert result.allowed is False
+
+    def test_grant_on_sandbox_warehouse_allowed(self):
+        """GRANT on sandbox warehouse should be allowed."""
+        prefix = get_session_prefix()
+        sql = f"GRANT USAGE ON WAREHOUSE {prefix}wh TO {prefix}user"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_grant_on_non_sandbox_warehouse_blocked(self):
+        """GRANT on non-sandbox warehouse should be blocked."""
+        sql = "GRANT USAGE ON WAREHOUSE prod_wh TO user1"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+
+    def test_grant_on_additional_sandbox_objects_allowed(self):
+        """GRANT on additional sandbox objects should be allowed."""
+        prefix = get_session_prefix()
+        sqls = [
+            f"GRANT USAGE ON STAGE {prefix}stage TO {prefix}user",
+            f"GRANT USAGE ON UDF {prefix}udf TO {prefix}user",
+            f"GRANT USAGE ON CONNECTION {prefix}conn TO {prefix}user",
+            f"GRANT USAGE ON SEQUENCE {prefix}seq TO {prefix}user",
+            f"GRANT USAGE ON PROCEDURE {prefix}proc TO {prefix}user",
+            f"GRANT USAGE ON MASKING POLICY {prefix}mask TO {prefix}user",
+            f"GRANT USAGE ON ROW ACCESS POLICY {prefix}rap TO {prefix}user",
+        ]
+        for sql in sqls:
+            result = check_sql_safety(sql)
+            assert result.allowed is True
+
+    def test_grant_on_additional_non_sandbox_objects_blocked(self):
+        """GRANT on additional non-sandbox objects should be blocked."""
+        sqls = [
+            "GRANT USAGE ON STAGE stage TO user1",
+            "GRANT USAGE ON UDF udf TO user1",
+            "GRANT USAGE ON CONNECTION conn TO user1",
+            "GRANT USAGE ON SEQUENCE seq TO user1",
+            "GRANT USAGE ON PROCEDURE proc TO user1",
+            "GRANT USAGE ON MASKING POLICY mask TO user1",
+            "GRANT USAGE ON ROW ACCESS POLICY rap TO user1",
+        ]
+        for sql in sqls:
+            result = check_sql_safety(sql)
+            assert result.allowed is False
 
     def test_grant_all_sandbox_allowed(self):
         """GRANT with all sandbox objects should be allowed."""
@@ -249,6 +348,36 @@ class TestAllDatabendObjects:
         result = check_sql_safety(sql)
         assert result.allowed is False
 
+    def test_create_warehouse_in_sandbox(self):
+        sql = f"CREATE WAREHOUSE {get_session_prefix()}wh"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_create_warehouse_outside_sandbox_blocked(self):
+        sql = "CREATE WAREHOUSE prod_wh"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+
+    def test_alter_warehouse_in_sandbox(self):
+        sql = f"ALTER WAREHOUSE {get_session_prefix()}wh SUSPEND"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_alter_warehouse_outside_sandbox_blocked(self):
+        sql = "ALTER WAREHOUSE prod_wh RESUME"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+
+    def test_drop_warehouse_in_sandbox(self):
+        sql = f"DROP WAREHOUSE {get_session_prefix()}wh"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_drop_warehouse_outside_sandbox_blocked(self):
+        sql = "DROP WAREHOUSE prod_wh"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+
     def test_create_function_in_sandbox(self):
         sql = f"CREATE FUNCTION {get_session_prefix()}myfunc AS (x) -> x + 1"
         result = check_sql_safety(sql)
@@ -271,6 +400,158 @@ class TestAllDatabendObjects:
 
     def test_alter_table_outside_sandbox_blocked(self):
         sql = "ALTER TABLE production.users ADD COLUMN c INT"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+
+
+class TestAdditionalObjects:
+    """Additional Databend object types."""
+
+    def test_additional_objects_in_sandbox_allowed(self):
+        prefix = get_session_prefix()
+        sqls = [
+            f"CREATE SEQUENCE {prefix}seq",
+            f"DROP SEQUENCE {prefix}seq",
+            f"CREATE PROCEDURE {prefix}proc AS $$ SELECT 1 $$",
+            f"DROP PROCEDURE {prefix}proc",
+            f"CREATE DICTIONARY {prefix}db.dict (id INT) SOURCE(mysql)",
+            f"DROP DICTIONARY {prefix}db.dict",
+            f"CREATE DYNAMIC TABLE {prefix}db.dt AS SELECT 1",
+            f"CREATE FILE FORMAT {prefix}ff TYPE = CSV",
+            f"DROP FILE FORMAT {prefix}ff",
+            f"CREATE NETWORK POLICY {prefix}np ALLOWED_IP_LIST = ('1.1.1.1')",
+            f"DROP NETWORK POLICY {prefix}np",
+            f"CREATE PASSWORD POLICY {prefix}pp PASSWORD_MIN_LENGTH = 8",
+            f"DROP PASSWORD POLICY {prefix}pp",
+            f"CREATE MASKING POLICY {prefix}mask AS (val STRING) RETURNS STRING -> val",
+            f"DROP MASKING POLICY {prefix}mask",
+            f"CREATE ROW ACCESS POLICY {prefix}rap AS (val INT) RETURNS BOOLEAN -> true",
+            f"DROP ROW ACCESS POLICY {prefix}rap",
+            f"CREATE TAG {prefix}tag",
+            f"DROP TAG {prefix}tag",
+            f"CREATE NOTIFICATION INTEGRATION {prefix}ni TYPE = WEBHOOK ENABLED = true",
+            f"DROP NOTIFICATION INTEGRATION {prefix}ni",
+            f"CREATE WORKLOAD GROUP {prefix}wg",
+            f"DROP WORKLOAD GROUP {prefix}wg",
+            f"CREATE CATALOG {prefix}cat TYPE=HIVE CONNECTION = (a='b')",
+            f"DROP CATALOG {prefix}cat",
+        ]
+        for sql in sqls:
+            result = check_sql_safety(sql)
+            assert result.allowed is True
+
+    def test_additional_objects_outside_sandbox_blocked(self):
+        sqls = [
+            "CREATE SEQUENCE seq",
+            "DROP SEQUENCE seq",
+            "CREATE PROCEDURE proc AS $$ SELECT 1 $$",
+            "DROP PROCEDURE proc",
+            "CREATE DICTIONARY prod_db.dict (id INT) SOURCE(mysql)",
+            "DROP DICTIONARY prod_db.dict",
+            "CREATE DYNAMIC TABLE prod_db.dt AS SELECT 1",
+            "CREATE FILE FORMAT ff TYPE = CSV",
+            "DROP FILE FORMAT ff",
+            "CREATE NETWORK POLICY np ALLOWED_IP_LIST = ('1.1.1.1')",
+            "DROP NETWORK POLICY np",
+            "CREATE PASSWORD POLICY pp PASSWORD_MIN_LENGTH = 8",
+            "DROP PASSWORD POLICY pp",
+            "CREATE MASKING POLICY mask AS (val STRING) RETURNS STRING -> val",
+            "DROP MASKING POLICY mask",
+            "CREATE ROW ACCESS POLICY rap AS (val INT) RETURNS BOOLEAN -> true",
+            "DROP ROW ACCESS POLICY rap",
+            "CREATE TAG tag",
+            "DROP TAG tag",
+            "CREATE NOTIFICATION INTEGRATION ni TYPE = WEBHOOK ENABLED = true",
+            "DROP NOTIFICATION INTEGRATION ni",
+            "CREATE WORKLOAD GROUP wg",
+            "DROP WORKLOAD GROUP wg",
+            "CREATE CATALOG cat TYPE=HIVE CONNECTION = (a='b')",
+            "DROP CATALOG cat",
+        ]
+        for sql in sqls:
+            result = check_sql_safety(sql)
+            assert result.allowed is False
+
+    def test_alter_additional_objects_in_sandbox_allowed(self):
+        prefix = get_session_prefix()
+        sqls = [
+            f"ALTER VIEW {prefix}db.v AS SELECT 1",
+            f"ALTER FUNCTION {prefix}func AS (x) -> x",
+            f"ALTER NETWORK POLICY {prefix}np SET ALLOWED_IP_LIST = ('1.1.1.1')",
+            f"ALTER PASSWORD POLICY {prefix}pp SET PASSWORD_MIN_LENGTH = 8",
+            f"ALTER NOTIFICATION INTEGRATION {prefix}ni SET ENABLED = true",
+            f"ALTER WORKLOAD GROUP {prefix}wg SET cpu_quota = '50%'",
+        ]
+        for sql in sqls:
+            result = check_sql_safety(sql)
+            assert result.allowed is True
+
+    def test_alter_additional_objects_outside_sandbox_blocked(self):
+        sqls = [
+            "ALTER VIEW prod_db.v AS SELECT 1",
+            "ALTER FUNCTION prod_func AS (x) -> x",
+            "ALTER NETWORK POLICY np SET ALLOWED_IP_LIST = ('1.1.1.1')",
+            "ALTER PASSWORD POLICY pp SET PASSWORD_MIN_LENGTH = 8",
+            "ALTER NOTIFICATION INTEGRATION ni SET ENABLED = true",
+            "ALTER WORKLOAD GROUP wg SET cpu_quota = '50%'",
+        ]
+        for sql in sqls:
+            result = check_sql_safety(sql)
+            assert result.allowed is False
+
+
+class TestIndexOperations:
+    """Index operation tests."""
+
+    def test_index_on_sandbox_table_allowed(self):
+        prefix = get_session_prefix()
+        sql = f"CREATE AGGREGATING INDEX {prefix}idx ON {prefix}db.t (c)"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_index_on_non_sandbox_table_blocked(self):
+        prefix = get_session_prefix()
+        sql = f"CREATE AGGREGATING INDEX {prefix}idx ON production.t (c)"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+        assert "Referenced object" in result.reason
+
+    def test_create_or_replace_index_allowed(self):
+        prefix = get_session_prefix()
+        sql = f"CREATE OR REPLACE AGGREGATING INDEX {prefix}idx AS SELECT 1"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_drop_index_in_sandbox_allowed(self):
+        prefix = get_session_prefix()
+        sql = f"DROP AGGREGATING INDEX {prefix}idx"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_drop_index_outside_sandbox_blocked(self):
+        sql = "DROP AGGREGATING INDEX prod_idx"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+
+
+class TestTagOperations:
+    """Tag operation tests."""
+
+    def test_set_tag_on_sandbox_object_allowed(self):
+        prefix = get_session_prefix()
+        sql = f"ALTER TABLE {prefix}db.t SET TAG {prefix}tag = 'x'"
+        result = check_sql_safety(sql)
+        assert result.allowed is True
+
+    def test_set_tag_with_non_sandbox_tag_blocked(self):
+        prefix = get_session_prefix()
+        sql = f"ALTER TABLE {prefix}db.t SET TAG prod_tag = 'x'"
+        result = check_sql_safety(sql)
+        assert result.allowed is False
+
+    def test_unset_tag_with_non_sandbox_object_blocked(self):
+        prefix = get_session_prefix()
+        sql = f"ALTER TABLE prod_db.t UNSET TAG {prefix}tag"
         result = check_sql_safety(sql)
         assert result.allowed is False
 
@@ -426,5 +707,3 @@ class TestSQLStandardization:
         sql = "INSERT/*comment*/INTO production.users VALUES (1)"
         result = check_sql_safety(sql)
         assert result.allowed is False
-
-
