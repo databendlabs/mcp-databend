@@ -122,6 +122,7 @@ Add the standard config above to your Gemini CLI `settings.json`.
 | `DATABEND_DSN` | - | Connection string |
 | `LOCAL_MODE` | `false` | Use embedded Databend |
 | `DATABEND_QUERY_TIMEOUT` | `300` | Query timeout (seconds) |
+| `DATABEND_MCP_SAFE_MODE` | `true` | Enable sandbox validation. Set to `false` to allow all SQL permitted by the Databend user. |
 | `DATABEND_MCP_SERVER_TRANSPORT` | `stdio` | Transport: `stdio`, `http`, `sse` |
 | `DATABEND_MCP_BIND_HOST` | `127.0.0.1` | Bind host for HTTP/SSE |
 | `DATABEND_MCP_BIND_PORT` | `8001` | Bind port for HTTP/SSE |

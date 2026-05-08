@@ -1,7 +1,7 @@
 """Environment configuration for the MCP Databend server."""
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -25,6 +25,7 @@ class DatabendConfig:
         DATABEND_DSN: The dsn connect string (defaults to: "databend://default:@127.0.0.1:8000/?sslmode=disable")
         LOCAL_MODE: Enable local mode to use in-memory Databend (defaults to: "false")
         DATABEND_QUERY_TIMEOUT: Query execution timeout in seconds (defaults to: "300")
+        DATABEND_MCP_SAFE_MODE: Enable sandbox safety validation (defaults to: "true")
     """
 
     def __init__(self):
@@ -87,6 +88,22 @@ class DatabendConfig:
             if "invalid literal" in str(e):
                 raise ValueError(f"Invalid port value '{port_str}'. Must be a valid integer.")
             raise
+
+    @property
+    def safe_mode(self) -> bool:
+        """Get the MCP SQL safety mode setting.
+
+        Default: True. Set DATABEND_MCP_SAFE_MODE=false to disable sandbox validation.
+        """
+        value = os.environ.get("DATABEND_MCP_SAFE_MODE", "true").lower()
+        if value in ("true", "1", "yes", "on"):
+            return True
+        if value in ("false", "0", "no", "off"):
+            return False
+        raise ValueError(
+            "Invalid DATABEND_MCP_SAFE_MODE value "
+            f"'{value}'. Use true or false."
+        )
 
     @property
     def query_timeout(self) -> int:

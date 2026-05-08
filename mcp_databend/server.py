@@ -1,17 +1,17 @@
-import json
-import os
+import atexit
+import concurrent.futures
 import logging
-import sys
 import re
+import sys
+from typing import Optional
+
+import pyarrow as pa
+from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
-import concurrent.futures
-from dotenv import load_dotenv
-import pyarrow as pa
-import atexit
-from typing import Optional
-from .env import get_config, TransportType
-from .safety import check_sql_safety, get_session_prefix, SANDBOX_PREFIX, SESSION_ID
+
+from .env import TransportType, get_config
+from .safety import SESSION_ID, check_sql_safety, get_session_prefix
 
 # Constants
 SERVER_NAME = "mcp-databend"
@@ -116,16 +116,21 @@ def recordbatches_to_dicts(batches: list[pa.RecordBatch]) -> list[dict]:
 def _execute_sql(sql: str) -> dict:
     logger.info(f"Executing SQL query: {sql}")
 
-    # Code-enforced safety check - cannot be bypassed
-    result = check_sql_safety(sql)
-    if not result.allowed:
-        logger.warning(f"Query blocked: {result.reason} - SQL: {sql}")
-        return {"status": "error", "message": result.reason}
+    config = get_config()
+
+    if config.safe_mode:
+        # Code-enforced safety check - cannot be bypassed while safe mode is enabled
+        result = check_sql_safety(sql)
+        if not result.allowed:
+            logger.warning(f"Query blocked: {result.reason} - SQL: {sql}")
+            return {"status": "error", "message": result.reason}
+    else:
+        logger.warning("DATABEND_MCP_SAFE_MODE=false: sandbox safety check is disabled")
 
     try:
         # Submit query to thread pool
         future = QUERY_EXECUTOR.submit(execute_databend_query, sql)
-        query_timeout = get_config().query_timeout
+        query_timeout = config.query_timeout
         try:
             # Wait for query to complete with timeout
             result = future.result(timeout=query_timeout)
@@ -157,8 +162,8 @@ def execute_multi_sql(sqls: list[str]) -> list[dict]:
     """
     Execute multiple SQL queries against Databend database with MCP safe mode protection.
 
-    Safe mode (enabled by default) blocks dangerous operations like DROP, DELETE,
-    TRUNCATE, ALTER, UPDATE, and REVOKE. Set SAFE_MODE=false to disable.
+    Safe mode (enabled by default) restricts write operations to the current
+    session sandbox. Set DATABEND_MCP_SAFE_MODE=false to disable sandbox validation.
 
     Args:
         sqls: List of SQL query strings to execute
@@ -175,11 +180,11 @@ def execute_sql(sql: str) -> dict:
     """
     Execute SQL query against Databend database.
 
-    SAFETY RULES (enforced by code):
+    SAFETY RULES (when DATABEND_MCP_SAFE_MODE is enabled):
     - Read operations (SELECT/SHOW/DESCRIBE/EXPLAIN/LIST): allowed on ALL objects
     - Write operations (CREATE/DROP/INSERT/UPDATE/DELETE/...): ONLY allowed on current session's sandbox
     - Current session sandbox prefix: use get_session_sandbox_prefix() to get it
-    - CREATE OR REPLACE: FORBIDDEN - use DROP then CREATE instead
+    - Set DATABEND_MCP_SAFE_MODE=false to disable sandbox validation
 
     Args:
         sql: SQL query string to execute
@@ -207,7 +212,7 @@ def show_tables(database: Optional[str] = None, filter: Optional[str] = None):
         Dictionary containing either query results or error information
     """
     logger.info(f"Listing tables in database '{database}'")
-    sql = f"SHOW TABLES"
+    sql = "SHOW TABLES"
     if database is not None:
         sql += f" FROM {database}"
     if filter is not None:
@@ -351,7 +356,7 @@ def create_session_sandbox_database(name: str) -> dict:
     Returns:
         Dictionary containing result or error
     """
-    if not name or not re.match(r'^\w+$', name):
+    if not name or not re.match(r"^\w+$", name):
         return {"status": "error", "message": "Invalid database name"}
     db_name = f"{get_session_prefix()}{name}"
     return _execute_sql(f"CREATE DATABASE IF NOT EXISTS {db_name}")
